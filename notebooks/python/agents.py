@@ -3,11 +3,12 @@ import itertools
 import math
 
 class E_greedy:
-	def __init__(self, e, estimator, discount, lmbda):
+	def __init__(self, e, estimator, discount, lmbda, Psi):
 		self.e = e
 		self.est = estimator
 		self.discount = discount
 		self.lmbda = lmbda
+		self.Psi = Psi
 
 	def get_optimal_action(self, s, env):
 		q = np.zeros(env.action_space.n)
@@ -24,6 +25,7 @@ class E_greedy:
 		'''
 		s = env.reset()
 		res = -1
+		cost = 0
 
 		for t in range(T):
 			if np.random.binomial(1, self.e):
@@ -33,7 +35,7 @@ class E_greedy:
 			
 			n_s, r, d, i = env.step(action)
 
-
+			cost += self.Psi[action]
 			target = r + self.discount * self.est.estimate(n_s, self.get_optimal_action(n_s, env)) - self.est.estimate(s, action) # target = r + q(s_{t+1}, a_{t+1}) - q(s_t, a_t)
 			self.est.update_w(target, s, action, self.discount, self.lmbda) 
 
@@ -44,15 +46,60 @@ class E_greedy:
 			s = n_s
 		
 		env.close()
-		return res
+		return res, cost
 
 
 
 	
 
 class U_e_greedy:
-	def __init__(self, e):
+	def __init__(self, e, estimator, discount, lmbda, Psi):
 		self.e = e
+		self.est = estimator
+		self.discount = discount
+		self.lmbda = lmbda
+		self.Psi = Psi
+
+	def get_optimal_action(self, s, env):
+		q = np.zeros(env.action_space.n)
+		for a in range(env.action_space.n):
+			q[a] = self.est.estimate(s, a)
+		return np.argmax(q)
+
+
+
+	def run(self, T, env):
+		'''
+		T: int, maximum number of timesteps in 1 episode
+		env: gym.env object, MountainCar-v0		
+		'''
+		s = env.reset()
+		res = -1
+		cost = 0
+		aware = .0
+
+		for t in range(T):
+			if np.random.binomial(1, self.e):
+				action = env.action_space.sample()
+			else:
+				action = self.get_optimal_action(s, env)
+			
+			n_s, r, d, i = env.step(action)
+
+			cost += self.Psi[action]
+			target = r - aware * self.Psi[action] + self.discount * self.est.estimate(n_s, self.get_optimal_action(n_s, env)) - self.est.estimate(s, action) # target = r + q(s_{t+1}, a_{t+1}) - q(s_t, a_t)
+			self.est.update_w(target, s, action, self.discount, self.lmbda) 
+
+			aware*=1.01
+			
+			if d:
+				res = t
+				break				
+
+			s = n_s
+		
+		env.close()
+		return res, cost
 
 
 class Estimator:
